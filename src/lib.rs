@@ -118,11 +118,12 @@ fn same_person(a: &str, b: &str) -> bool {
 }
 
 /// `message` with one `Co-authored-by:` trailer per co-author not credited in
-/// it yet. Trailers go into the message's last block when that block is
-/// already nothing but `token: value` lines (git's trailer block), otherwise
-/// into a new final block; the rest of the message — including its trailing
-/// whitespace when nothing is added — is never touched. An empty message
-/// becomes just the trailers.
+/// it yet. Trailers go into the message's last block when a blank line
+/// separates that block from the rest of the message and it is already
+/// nothing but `token: value` lines (git's trailer block — a subject is never
+/// one), otherwise into a new final block; the rest of the message —
+/// including its trailing whitespace when nothing is added — is never
+/// touched. An empty message becomes just the trailers.
 pub fn with_trailers(message: &str, coauthors: &[CoAuthor]) -> String {
     let mut seen = existing_trailers(message);
     let mut block: Vec<String> = Vec::new();
@@ -143,14 +144,15 @@ pub fn with_trailers(message: &str, coauthors: &[CoAuthor]) -> String {
     if head.is_empty() {
         return trailers + tail;
     }
-    // git's rule: the last paragraph is the trailer block only when every one
-    // of its lines is a `token: value` line; then we join it, else we open a
-    // new block after a blank line.
-    let last_paragraph = head.rsplit_once("\n\n").map(|(_, p)| p).unwrap_or(head);
-    let is_trailer_block = !last_paragraph.is_empty()
-        && last_paragraph.lines().all(|line| {
+    // git's rule: the trailer block is the last paragraph only when a blank
+    // line separates it from the rest of the message (a subject is never a
+    // trailer block) and every one of its lines is a `token: value` line;
+    // then we join it, else we open a new block after a blank line.
+    let is_trailer_block = head.rsplit_once("\n\n").is_some_and(|(_, last_paragraph)| {
+        last_paragraph.lines().all(|line| {
             matches!(line.trim().split_once(':'), Some((token, value)) if !token.trim().is_empty() && !value.trim().is_empty())
-        });
+        })
+    });
     if is_trailer_block {
         format!("{head}\n{trailers}{tail}")
     } else {
@@ -506,6 +508,45 @@ mod tests {
         }
     }
 
+    /// The command ids `plugin.toml` registers, read from the manifest itself —
+    /// the source of truth the dispatch has to match.
+    fn manifest_command_ids() -> Vec<&'static str> {
+        let mut in_commands = false;
+        let mut ids = Vec::new();
+        for line in include_str!("../plugin.toml").lines() {
+            let line = line.trim();
+            if line.starts_with('[') {
+                in_commands = line == "[[contributes.commands]]";
+            } else if in_commands
+                && let Some(rest) = line.strip_prefix("id = ")
+            {
+                ids.push(rest.trim_matches('"'));
+            }
+        }
+        ids
+    }
+
+    /// The trailers git recognizes in `message` (`git interpret-trailers
+    /// --parse`) — the authority the resulting commit message must satisfy.
+    fn git_parsed_trailers(message: &str) -> Vec<String> {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("git")
+            .args(["interpret-trailers", "--parse"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("git is available");
+        child.stdin.take().unwrap().write_all(message.as_bytes()).unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "git interpret-trailers failed");
+        String::from_utf8(output.stdout)
+            .expect("git prints UTF-8")
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
     // ---- parse_person ----
 
     #[test]
@@ -620,6 +661,18 @@ mod tests {
         let message = "Note:\nthis explains the colon line";
         let out = with_trailers(message, &[person("Ada", "a@x.io")]);
         assert_eq!(out, format!("{message}\n\nCo-authored-by: Ada <a@x.io>"));
+    }
+
+    #[test]
+    fn a_colon_subject_is_not_a_trailer_block() {
+        let out = with_trailers("fix: bug\n", &[person("Ada Lovelace", "ada@example.com")]);
+        assert_eq!(
+            out,
+            "fix: bug\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
+            "git requires a blank line before the trailer block"
+        );
+        let parsed = git_parsed_trailers(&out);
+        assert_eq!(parsed, vec!["Co-authored-by: Ada Lovelace <ada@example.com>".to_owned()]);
     }
 
     #[test]
@@ -854,6 +907,21 @@ mod tests {
     }
 
     #[test]
+    fn every_command_the_manifest_registers_is_dispatched() {
+        let host = MockHost::install();
+        let mut plugin = GitCoAuthors;
+        let ids = manifest_command_ids();
+        assert!(ids.contains(&"remove-teammates"), "the manifest registers Remove Teammates");
+        for id in ids {
+            let outcome = plugin.run_command(id, &host.invocation(), None);
+            assert!(
+                !matches!(outcome, Err(Error::NotFound(_))),
+                "the manifest registers {id}, but run_command does not handle it: {outcome:?}"
+            );
+        }
+    }
+
+    #[test]
     fn clear_unpicks_everyone() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
@@ -904,6 +972,32 @@ mod tests {
         assert!(
             message.contains("review the message"),
             "the user still commits themselves"
+        );
+    }
+
+    #[test]
+    fn apply_on_a_colon_subject_produces_a_trailer_git_parses() {
+        let host = MockHost::install();
+        let mut plugin = GitCoAuthors;
+        let roster = vec![person("Ada Lovelace", "ada@example.com")];
+        storage::set(ROSTER, &serde_json::to_string(&roster).unwrap()).unwrap();
+        storage::set(ACTIVE, &serde_json::to_string(&["ada@example.com"]).unwrap()).unwrap();
+        host.set_commit_draft(Some(draft("fix: bug\n")));
+        let message = plugin
+            .run_command("apply", &host.invocation(), None)
+            .unwrap()
+            .unwrap();
+        assert!(message.contains("review the message"), "{message}");
+        let new_draft = host.commit_draft().unwrap();
+        assert_eq!(
+            new_draft.message,
+            "fix: bug\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
+            "the subject gets a blank line of its own before the trailer block"
+        );
+        assert_eq!(
+            git_parsed_trailers(&new_draft.message),
+            vec!["Co-authored-by: Ada Lovelace <ada@example.com>".to_owned()],
+            "git recognizes the co-author trailer"
         );
     }
 

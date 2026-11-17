@@ -45,7 +45,7 @@ title = "Git CoAuthors: Add Teammate"
 category = "Git CoAuthors"
 
 [[contributes.commands]]
-id = "remove-teammate"
+id = "remove-teammates"
 title = "Git CoAuthors: Remove Teammates"
 category = "Git CoAuthors"
 
