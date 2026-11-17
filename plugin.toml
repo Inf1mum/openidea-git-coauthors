@@ -1,0 +1,65 @@
+id = "inf1mum.git-coauthors"
+name = "Git CoAuthors"
+version = "0.1.0"
+description = """\
+Git Mob-style co-authored commits: keep a roster of your teammates, pick the \
+ones you are pairing or mobbing with, and every picked person is credited on \
+your next commit with a `Co-authored-by: Name <email>` trailer. The status \
+bar shows the current co-author set at a glance, a button above the commit \
+message adds the trailers to the message you are preparing (idempotent, so \
+re-running never duplicates a trailer), and the roster survives restarts. \
+Nothing leaves your machine.\
+"""
+authors = ["Inf1mum"]
+license = "Apache-2.0"
+homepage = "https://github.com/Inf1mum/openidea-git-coauthors"
+change-notes = "0.1.0 — first release: a teammates roster persisted in the plugin's storage, pick-many of the current co-author set, the set in the status bar, and Co-authored-by trailers appended to the commit being prepared (deduped, message preserved) from a command or the button above the commit message."
+categories = ["vcs"]
+# The commit surface (`pending-commit`, `set-commit-message`, the
+# `commit.message` menu) is OpenIDEA API 1.3.
+engines.openidea = "^1.3"
+wasm = "dist/plugin.wasm"
+# Commands activate the plugin (the picker, the trailer button above the
+# commit message). `vcs-changed` re-shows the status bar item after the host
+# recreated the instance (idle reclaim, IDE start) without costing anything:
+# it just re-renders the stored co-author set.
+activation = ["on-command:*", "on-event:vcs-changed"]
+
+[capabilities]
+# vcs.read: reads the commit being prepared (pending-commit).
+# vcs.write: replaces its message with the trailers appended
+# (set-commit-message; the user still reviews and commits).
+# storage: the teammates roster and the active co-author set, so both survive
+# restarts and idle reclaim. events: the vcs-changed wakeups that re-show the
+# status bar item.
+required = ["events", "storage", "vcs.read", "vcs.write"]
+
+[[contributes.commands]]
+id = "pick"
+title = "Git CoAuthors: Pick Co-authors"
+category = "Git CoAuthors"
+
+[[contributes.commands]]
+id = "add-teammate"
+title = "Git CoAuthors: Add Teammate"
+category = "Git CoAuthors"
+
+[[contributes.commands]]
+id = "remove-teammate"
+title = "Git CoAuthors: Remove Teammates"
+category = "Git CoAuthors"
+
+[[contributes.commands]]
+id = "clear"
+title = "Git CoAuthors: Clear Co-authors"
+category = "Git CoAuthors"
+
+[[contributes.commands]]
+id = "apply"
+title = "Git CoAuthors: Add Co-authored-by Trailers"
+category = "Git CoAuthors"
+
+# The button above the commit message (Commit tool window and dialog).
+[[contributes.menus]]
+menu = "commit.message"
+command = "apply"
