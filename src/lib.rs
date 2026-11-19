@@ -14,9 +14,7 @@
 //! `vcs-changed` event only re-renders the status bar item from storage.
 
 use openidea_plugin::host::{self, storage};
-use openidea_plugin::{
-    Context, Error, Event, Invocation, LogLevel, PickItem, Plugin, StatusItem, register_plugin,
-};
+use openidea_plugin::{Context, Error, Event, Invocation, LogLevel, PickItem, Plugin, StatusItem, register_plugin};
 use serde::{Deserialize, Serialize};
 
 /// Status bar item id.
@@ -56,30 +54,22 @@ pub fn parse_person(input: &str) -> Result<CoAuthor, String> {
     let (name, email) = match (open, close) {
         (Some(o), Some(c)) if c > o => (input[..o].trim(), input[o + 1..c].trim()),
         _ => {
-            return Err(format!(
-                "{input:?} is not Name <email> — for example: Ada Lovelace <ada@example.com>"
-            ));
+            return Err(format!("{input:?} is not Name <email> — for example: Ada Lovelace <ada@example.com>"));
         }
     };
     if name.is_empty() {
         return Err("the name before <email> is empty".into());
     }
     if name.len() > MAX_PART || email.len() > MAX_PART {
-        return Err(format!(
-            "names and emails are at most {MAX_PART} characters"
-        ));
+        return Err(format!("names and emails are at most {MAX_PART} characters"));
     }
     if name.contains(['<', '>', '\n', '\r']) {
         return Err("the name may not contain <, > or a line break".into());
     }
-    if email.is_empty() || email.contains([' ', '\t', '<', '>', '\n', '\r']) || !email.contains('@')
-    {
+    if email.is_empty() || email.contains([' ', '\t', '<', '>', '\n', '\r']) || !email.contains('@') {
         return Err(format!("{email:?} is not an email (one token with an @)"));
     }
-    Ok(CoAuthor {
-        name: name.to_owned(),
-        email: email.to_owned(),
-    })
+    Ok(CoAuthor { name: name.to_owned(), email: email.to_owned() })
 }
 
 /// Trailer values (`Ada Lovelace <ada@example.com>`) already in `message`:
@@ -91,10 +81,7 @@ fn existing_trailers(message: &str) -> Vec<String> {
         .filter_map(|line| {
             let line = line.trim();
             let (token, value) = line.split_once(':')?;
-            token
-                .trim()
-                .eq_ignore_ascii_case("co-authored-by")
-                .then(|| value.trim().to_owned())
+            token.trim().eq_ignore_ascii_case("co-authored-by").then(|| value.trim().to_owned())
         })
         .collect()
 }
@@ -107,9 +94,7 @@ fn same_person(a: &str, b: &str) -> bool {
         return true;
     }
     let email = |s: &str| {
-        s.rsplit_once('<')
-            .and_then(|(_, rest)| rest.split_once('>'))
-            .map(|(e, _)| e.trim().to_ascii_lowercase())
+        s.rsplit_once('<').and_then(|(_, rest)| rest.split_once('>')).map(|(e, _)| e.trim().to_ascii_lowercase())
     };
     match (email(a), email(b)) {
         (Some(x), Some(y)) => x == y,
@@ -153,11 +138,7 @@ pub fn with_trailers(message: &str, coauthors: &[CoAuthor]) -> String {
             matches!(line.trim().split_once(':'), Some((token, value)) if !token.trim().is_empty() && !value.trim().is_empty())
         })
     });
-    if is_trailer_block {
-        format!("{head}\n{trailers}{tail}")
-    } else {
-        format!("{head}\n\n{trailers}{tail}")
-    }
+    if is_trailer_block { format!("{head}\n{trailers}{tail}") } else { format!("{head}\n\n{trailers}{tail}") }
 }
 
 /// The status bar text: `＋ co-authors` when nobody is picked, else the
@@ -172,37 +153,25 @@ pub fn status_text(active: &[CoAuthor]) -> String {
     if names.len() <= STATUS_NAMES {
         format!("co-authors: {}", names.join(", "))
     } else {
-        format!(
-            "co-authors: {}, +{}",
-            names[..STATUS_NAMES].join(", "),
-            active.len() - STATUS_NAMES
-        )
+        format!("co-authors: {}, +{}", names[..STATUS_NAMES].join(", "), active.len() - STATUS_NAMES)
     }
 }
 
 fn names_of(active: &[CoAuthor]) -> String {
-    active
-        .iter()
-        .map(|p| p.name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
+    active.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")
 }
 
 /// Sorts the roster by name (then email), case-insensitively.
 fn sort_roster(roster: &mut [CoAuthor]) {
     roster.sort_by(|a, b| {
-        (a.name.to_lowercase(), a.email.to_lowercase())
-            .cmp(&(b.name.to_lowercase(), b.email.to_lowercase()))
+        (a.name.to_lowercase(), a.email.to_lowercase()).cmp(&(b.name.to_lowercase(), b.email.to_lowercase()))
     });
 }
 
 fn load_roster() -> Vec<CoAuthor> {
     match storage::get(ROSTER) {
         Ok(Some(json)) => serde_json::from_str::<Vec<CoAuthor>>(&json).unwrap_or_else(|e| {
-            host::log(
-                LogLevel::Warn,
-                &format!("roster in storage is not readable ({e}); starting over"),
-            );
+            host::log(LogLevel::Warn, &format!("roster in storage is not readable ({e}); starting over"));
             Vec::new()
         }),
         Ok(None) => Vec::new(),
@@ -214,10 +183,7 @@ fn load_roster() -> Vec<CoAuthor> {
 }
 
 fn save_roster(roster: &[CoAuthor]) -> Result<(), Error> {
-    storage::set(
-        ROSTER,
-        &serde_json::to_string(roster).expect("a roster is JSON-serializable"),
-    )
+    storage::set(ROSTER, &serde_json::to_string(roster).expect("a roster is JSON-serializable"))
 }
 
 /// The active emails not in the roster any more are dropped (a removed
@@ -227,25 +193,15 @@ fn load_active(roster: &[CoAuthor]) -> Vec<CoAuthor> {
         return Vec::new();
     };
     let Ok(emails) = serde_json::from_str::<Vec<String>>(&json) else {
-        host::log(
-            LogLevel::Warn,
-            "the active co-authors in storage are not readable; none are picked",
-        );
+        host::log(LogLevel::Warn, "the active co-authors in storage are not readable; none are picked");
         return Vec::new();
     };
-    roster
-        .iter()
-        .filter(|p| emails.iter().any(|e| e.eq_ignore_ascii_case(&p.email)))
-        .cloned()
-        .collect()
+    roster.iter().filter(|p| emails.iter().any(|e| e.eq_ignore_ascii_case(&p.email))).cloned().collect()
 }
 
 fn save_active(active: &[CoAuthor]) -> Result<(), Error> {
     let emails: Vec<&str> = active.iter().map(|p| p.email.as_str()).collect();
-    storage::set(
-        ACTIVE,
-        &serde_json::to_string(&emails).expect("emails are JSON-serializable"),
-    )
+    storage::set(ACTIVE, &serde_json::to_string(&emails).expect("emails are JSON-serializable"))
 }
 
 fn refresh_status() -> Result<(), Error> {
@@ -261,21 +217,13 @@ fn refresh_status() -> Result<(), Error> {
         format!(
             "Co-authored-by trailers on your next commit:\n{}\n\n\
              Roster: {} teammate(s). Click to pick co-authors.",
-            active
-                .iter()
-                .map(|p| p.trailer())
-                .collect::<Vec<_>>()
-                .join("\n"),
+            active.iter().map(|p| p.trailer()).collect::<Vec<_>>().join("\n"),
             roster.len()
         )
     };
     host::set_status_item(
         ITEM,
-        &StatusItem {
-            text: status_text(&active),
-            tooltip: Some(tooltip),
-            command: Some("pick".into()),
-        },
+        &StatusItem { text: status_text(&active), tooltip: Some(tooltip), command: Some("pick".into()) },
     );
     Ok(())
 }
@@ -303,14 +251,10 @@ impl GitCoAuthors {
         }
         if roster.is_empty() {
             refresh_status()?;
-            return Ok(Some(
-                "Still no teammates — Git CoAuthors: Add Teammate adds one.".to_owned(),
-            ));
+            return Ok(Some("Still no teammates — Git CoAuthors: Add Teammate adds one.".to_owned()));
         }
-        let items: Vec<PickItem> = roster
-            .iter()
-            .map(|p| PickItem::new(&p.email, &p.name).description(&p.email))
-            .collect();
+        let items: Vec<PickItem> =
+            roster.iter().map(|p| PickItem::new(&p.email, &p.name).description(&p.email)).collect();
         let Some(chosen) = host::pick_many(
             "Pick the co-authors to credit on your next commit (confirm with none checked to credit nobody)",
             &items,
@@ -318,11 +262,8 @@ impl GitCoAuthors {
         else {
             return Ok(None);
         };
-        let active: Vec<CoAuthor> = roster
-            .iter()
-            .filter(|p| chosen.iter().any(|k| k.eq_ignore_ascii_case(&p.email)))
-            .cloned()
-            .collect();
+        let active: Vec<CoAuthor> =
+            roster.iter().filter(|p| chosen.iter().any(|k| k.eq_ignore_ascii_case(&p.email))).cloned().collect();
         save_active(&active)?;
         refresh_status()?;
         Ok(Some(if active.is_empty() {
@@ -338,10 +279,7 @@ impl GitCoAuthors {
         };
         let person = parse_person(&text).map_err(Error::Invalid)?;
         let mut roster = load_roster();
-        if let Some(slot) = roster
-            .iter_mut()
-            .find(|p| p.email.eq_ignore_ascii_case(&person.email))
-        {
+        if let Some(slot) = roster.iter_mut().find(|p| p.email.eq_ignore_ascii_case(&person.email)) {
             if slot.name == person.name {
                 return Ok(Some(format!("{} is already in the roster.", person.name)));
             }
@@ -349,9 +287,7 @@ impl GitCoAuthors {
             let renamed = slot.name.clone();
             sort_roster(&mut roster);
             save_roster(&roster)?;
-            return Ok(Some(format!(
-                "Renamed to {renamed} (same email, already in the roster)."
-            )));
+            return Ok(Some(format!("Renamed to {renamed} (same email, already in the roster).")));
         }
         if roster.len() >= MAX_TEAMMATES {
             return Err(Error::Invalid(format!(
@@ -373,42 +309,28 @@ impl GitCoAuthors {
         if roster.is_empty() {
             return Ok(Some("The roster is empty — nothing to remove.".to_owned()));
         }
-        let items: Vec<PickItem> = roster
-            .iter()
-            .map(|p| PickItem::new(&p.email, &p.name).description(&p.email))
-            .collect();
-        let Some(chosen) = host::pick_many(
-            "Pick the teammates to remove (they also stop being picked as co-authors)",
-            &items,
-        )?
+        let items: Vec<PickItem> =
+            roster.iter().map(|p| PickItem::new(&p.email, &p.name).description(&p.email)).collect();
+        let Some(chosen) =
+            host::pick_many("Pick the teammates to remove (they also stop being picked as co-authors)", &items)?
         else {
             return Ok(None);
         };
-        let removed: Vec<CoAuthor> = roster
-            .iter()
-            .filter(|p| chosen.iter().any(|k| k.eq_ignore_ascii_case(&p.email)))
-            .cloned()
-            .collect();
-        let roster: Vec<CoAuthor> = roster
-            .into_iter()
-            .filter(|p| !removed.iter().any(|r| r.email == p.email))
-            .collect();
+        let removed: Vec<CoAuthor> =
+            roster.iter().filter(|p| chosen.iter().any(|k| k.eq_ignore_ascii_case(&p.email))).cloned().collect();
+        let roster: Vec<CoAuthor> =
+            roster.into_iter().filter(|p| !removed.iter().any(|r| r.email == p.email)).collect();
         let active: Vec<CoAuthor> = load_active(&roster);
         save_roster(&roster)?;
         save_active(&active)?;
         refresh_status()?;
-        Ok(Some(format!(
-            "Removed from the roster: {}.",
-            names_of(&removed)
-        )))
+        Ok(Some(format!("Removed from the roster: {}.", names_of(&removed))))
     }
 
     fn clear(&mut self) -> Result<Option<String>, Error> {
         save_active(&[])?;
         refresh_status()?;
-        Ok(Some(
-            "No co-authors: the next commit is credited to you alone.".to_owned(),
-        ))
+        Ok(Some("No co-authors: the next commit is credited to you alone.".to_owned()))
     }
 
     /// `apply`: appends the picked people's `Co-authored-by:` trailers to the
@@ -419,21 +341,18 @@ impl GitCoAuthors {
         let active = load_active(&roster);
         if active.is_empty() {
             return Ok(Some(
-                "No co-authors are picked — choose some with Git CoAuthors: Pick Co-authors first."
-                    .to_owned(),
+                "No co-authors are picked — choose some with Git CoAuthors: Pick Co-authors first.".to_owned(),
             ));
         }
         let Some(draft) = host::pending_commit()? else {
             return Err(Error::Failed(
-                "no commit is being prepared — open the Commit tool window (or the Commit dialog) and run this there".into(),
+                "no commit is being prepared — open the Commit tool window (or the Commit dialog) and run this there"
+                    .into(),
             ));
         };
         let message = with_trailers(&draft.message, &active);
         if message == draft.message {
-            return Ok(Some(format!(
-                "The message already credits {}.",
-                names_of(&active)
-            )));
+            return Ok(Some(format!("The message already credits {}.", names_of(&active))));
         }
         match host::set_commit_message(draft.revision, &message) {
             Ok(()) => Ok(Some(format!(
@@ -455,12 +374,7 @@ impl Plugin for GitCoAuthors {
         refresh_status()
     }
 
-    fn run_command(
-        &mut self,
-        id: &str,
-        _ctx: &Invocation,
-        _arg: Option<&str>,
-    ) -> Result<Option<String>, Error> {
+    fn run_command(&mut self, id: &str, _ctx: &Invocation, _arg: Option<&str>) -> Result<Option<String>, Error> {
         let result = match id {
             "pick" => self.pick(),
             "add-teammate" => self.add_teammate(),
@@ -493,19 +407,11 @@ mod tests {
     use openidea_plugin::mock::MockHost;
 
     fn person(name: &str, email: &str) -> CoAuthor {
-        CoAuthor {
-            name: name.to_owned(),
-            email: email.to_owned(),
-        }
+        CoAuthor { name: name.to_owned(), email: email.to_owned() }
     }
 
     fn draft(message: &str) -> openidea_plugin::CommitDraft {
-        openidea_plugin::CommitDraft {
-            revision: 7,
-            message: message.to_owned(),
-            amend: false,
-            changes: Vec::new(),
-        }
+        openidea_plugin::CommitDraft { revision: 7, message: message.to_owned(), amend: false, changes: Vec::new() }
     }
 
     /// The command ids `plugin.toml` registers, read from the manifest itself —
@@ -517,9 +423,7 @@ mod tests {
             let line = line.trim();
             if line.starts_with('[') {
                 in_commands = line == "[[contributes.commands]]";
-            } else if in_commands
-                && let Some(rest) = line.strip_prefix("id = ")
-            {
+            } else if in_commands && let Some(rest) = line.strip_prefix("id = ") {
                 ids.push(rest.trim_matches('"'));
             }
         }
@@ -540,25 +444,15 @@ mod tests {
         child.stdin.take().unwrap().write_all(message.as_bytes()).unwrap();
         let output = child.wait_with_output().unwrap();
         assert!(output.status.success(), "git interpret-trailers failed");
-        String::from_utf8(output.stdout)
-            .expect("git prints UTF-8")
-            .lines()
-            .map(str::to_owned)
-            .collect()
+        String::from_utf8(output.stdout).expect("git prints UTF-8").lines().map(str::to_owned).collect()
     }
 
     // ---- parse_person ----
 
     #[test]
     fn parses_name_and_email() {
-        assert_eq!(
-            parse_person("Ada Lovelace <ada@example.com>").unwrap(),
-            person("Ada Lovelace", "ada@example.com")
-        );
-        assert_eq!(
-            parse_person("  Bob <BOB@x.io>  ").unwrap(),
-            person("Bob", "BOB@x.io")
-        );
+        assert_eq!(parse_person("Ada Lovelace <ada@example.com>").unwrap(), person("Ada Lovelace", "ada@example.com"));
+        assert_eq!(parse_person("  Bob <BOB@x.io>  ").unwrap(), person("Bob", "BOB@x.io"));
     }
 
     #[test]
@@ -571,24 +465,15 @@ mod tests {
         assert!(parse_person("<ada@example.com>").is_err(), "empty name");
         assert!(parse_person("Ada <a@x.io").is_err(), "unclosed bracket");
         let long = "x".repeat(MAX_PART + 1);
-        assert!(
-            parse_person(format!("{long} <a@x.io>").as_str()).is_err(),
-            "name too long"
-        );
+        assert!(parse_person(format!("{long} <a@x.io>").as_str()).is_err(), "name too long");
     }
 
     // ---- with_trailers ----
 
     #[test]
     fn appends_after_prose_with_a_blank_line() {
-        let out = with_trailers(
-            "Fix the widget\n\nThe widget was sad.",
-            &[person("Ada Lovelace", "ada@example.com")],
-        );
-        assert_eq!(
-            out,
-            "Fix the widget\n\nThe widget was sad.\n\nCo-authored-by: Ada Lovelace <ada@example.com>"
-        );
+        let out = with_trailers("Fix the widget\n\nThe widget was sad.", &[person("Ada Lovelace", "ada@example.com")]);
+        assert_eq!(out, "Fix the widget\n\nThe widget was sad.\n\nCo-authored-by: Ada Lovelace <ada@example.com>");
     }
 
     #[test]
@@ -605,49 +490,25 @@ mod tests {
     fn dedupes_by_email_case_insensitively_and_anywhere_in_the_message() {
         let message = "Work\n\nCo-authored-by: Original Name <ada@example.com>";
         let out = with_trailers(message, &[person("Ada Lovelace", "ADA@EXAMPLE.COM")]);
-        assert_eq!(
-            out, message,
-            "same email, different case and name: not duplicated"
-        );
+        assert_eq!(out, message, "same email, different case and name: not duplicated");
         let out = with_trailers(
             "Co-authored-by: Ada <ada@example.com>\n\nbody",
             &[person("Ada Lovelace", "ada@example.com")],
         );
-        assert_eq!(
-            out, "Co-authored-by: Ada <ada@example.com>\n\nbody",
-            "a trailer outside the footer still counts"
-        );
+        assert_eq!(out, "Co-authored-by: Ada <ada@example.com>\n\nbody", "a trailer outside the footer still counts");
     }
 
     #[test]
     fn leaves_the_message_untouched_when_everyone_is_already_credited() {
         let message = "Work\n\nCo-authored-by: Ada Lovelace <ada@example.com>";
-        assert_eq!(
-            with_trailers(message, &[person("Ada Lovelace", "ada@example.com")]),
-            message
-        );
-        assert_eq!(
-            with_trailers("untouched", &[]),
-            "untouched",
-            "no co-authors, no change"
-        );
+        assert_eq!(with_trailers(message, &[person("Ada Lovelace", "ada@example.com")]), message);
+        assert_eq!(with_trailers("untouched", &[]), "untouched", "no co-authors, no change");
     }
 
     #[test]
     fn dedupes_within_the_picked_set_itself() {
-        let out = with_trailers(
-            "Work",
-            &[
-                person("Ada", "ada@example.com"),
-                person("Ada Lovelace", "ADA@example.com"),
-            ],
-        );
-        assert_eq!(
-            out.lines()
-                .filter(|l| l.starts_with("Co-authored-by:"))
-                .count(),
-            1
-        );
+        let out = with_trailers("Work", &[person("Ada", "ada@example.com"), person("Ada Lovelace", "ADA@example.com")]);
+        assert_eq!(out.lines().filter(|l| l.starts_with("Co-authored-by:")).count(), 1);
     }
 
     #[test]
@@ -667,8 +528,7 @@ mod tests {
     fn a_colon_subject_is_not_a_trailer_block() {
         let out = with_trailers("fix: bug\n", &[person("Ada Lovelace", "ada@example.com")]);
         assert_eq!(
-            out,
-            "fix: bug\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
+            out, "fix: bug\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
             "git requires a blank line before the trailer block"
         );
         let parsed = git_parsed_trailers(&out);
@@ -678,10 +538,7 @@ mod tests {
     #[test]
     fn trailers_of_several_people_keep_the_picked_order() {
         let out = with_trailers("Work", &[person("Ada", "a@x.io"), person("Bob", "b@x.io")]);
-        assert_eq!(
-            out,
-            "Work\n\nCo-authored-by: Ada <a@x.io>\nCo-authored-by: Bob <b@x.io>"
-        );
+        assert_eq!(out, "Work\n\nCo-authored-by: Ada <a@x.io>\nCo-authored-by: Bob <b@x.io>");
     }
 
     // ---- status bar ----
@@ -690,11 +547,7 @@ mod tests {
     fn status_text_shows_the_picked_names() {
         assert_eq!(status_text(&[]), "＋ co-authors");
         assert_eq!(status_text(&[person("Ada", "a@x.io")]), "co-authors: Ada");
-        let three = vec![
-            person("Ada", "a@x.io"),
-            person("Bob", "b@x.io"),
-            person("Cid", "c@x.io"),
-        ];
+        let three = vec![person("Ada", "a@x.io"), person("Bob", "b@x.io"), person("Cid", "c@x.io")];
         assert_eq!(status_text(&three), "co-authors: Ada, Bob, Cid");
         let mut many = three.clone();
         many.push(person("Dee", "d@x.io"));
@@ -708,33 +561,20 @@ mod tests {
             person("Another Long Name Here", "b@x.io"),
             person("And A Third Long One", "c@x.io"),
         ];
-        let joined = three_long
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let joined = three_long.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ");
         assert_eq!(status_text(&three_long), format!("co-authors: {joined}"));
     }
 
     #[test]
     fn the_status_item_carries_the_picker_and_the_trailers_in_its_tooltip() {
         let host = MockHost::install();
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
         refresh_status().unwrap();
         let item = &host.status_items()[ITEM];
         assert_eq!(item.text, "co-authors: Ada");
         assert_eq!(item.command.as_deref(), Some("pick"));
-        assert!(
-            item.tooltip
-                .as_deref()
-                .unwrap()
-                .contains("Co-authored-by: Ada <a@x.io>")
-        );
+        assert!(item.tooltip.as_deref().unwrap().contains("Co-authored-by: Ada <a@x.io>"));
     }
 
     // ---- commands ----
@@ -753,15 +593,9 @@ mod tests {
         let mut plugin = GitCoAuthors;
         host.answer_next_prompt(Some(&["Ada Lovelace <ada@example.com>"]));
         host.answer_next_prompt(Some(&["ada@example.com"]));
-        let message = plugin
-            .run_command("pick", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("pick", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("Ada Lovelace"), "{message}");
-        assert_eq!(
-            roster_of(&host),
-            vec![person("Ada Lovelace", "ada@example.com")]
-        );
+        assert_eq!(roster_of(&host), vec![person("Ada Lovelace", "ada@example.com")]);
         assert_eq!(active_of(&host), vec!["ada@example.com"]);
         assert_eq!(host.status_items()[ITEM].text, "co-authors: Ada Lovelace");
     }
@@ -770,15 +604,9 @@ mod tests {
     fn dismissing_the_picker_changes_nothing() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
-        let outcome = plugin
-            .run_command("pick", &host.invocation(), None)
-            .unwrap();
+        let outcome = plugin.run_command("pick", &host.invocation(), None).unwrap();
         assert!(outcome.is_none(), "dismissed: no message");
         assert_eq!(active_of(&host), vec!["a@x.io"]);
     }
@@ -787,21 +615,11 @@ mod tests {
     fn confirming_an_empty_picker_clears_the_set() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
         host.answer_next_prompt(Some(&[]));
-        let message = plugin
-            .run_command("pick", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            message,
-            "No co-authors: the next commit is credited to you alone."
-        );
+        let message = plugin.run_command("pick", &host.invocation(), None).unwrap().unwrap();
+        assert_eq!(message, "No co-authors: the next commit is credited to you alone.");
         assert!(active_of(&host).is_empty());
         assert_eq!(host.status_items()[ITEM].text, "＋ co-authors");
     }
@@ -811,10 +629,7 @@ mod tests {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
         host.answer_next_prompt(None); // dismissed the first-teammate dialog
-        let message = plugin
-            .run_command("pick", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("pick", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("Add Teammate"), "{message}");
     }
 
@@ -823,59 +638,33 @@ mod tests {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
         host.answer_next_prompt(Some(&["Bob <bob@x.io>"]));
-        let message = plugin
-            .run_command("add-teammate", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("add-teammate", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("Bob"), "{message}");
         host.answer_next_prompt(Some(&["Ada Lovelace <ada@x.io>"]));
-        plugin
-            .run_command("add-teammate", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        plugin.run_command("add-teammate", &host.invocation(), None).unwrap().unwrap();
         assert_eq!(
             roster_of(&host),
-            vec![
-                person("Ada Lovelace", "ada@x.io"),
-                person("Bob", "bob@x.io")
-            ],
+            vec![person("Ada Lovelace", "ada@x.io"), person("Bob", "bob@x.io")],
             "sorted by name"
         );
         host.answer_next_prompt(Some(&["Ada Lovelace II <ADA@X.IO>"]));
-        let message = plugin
-            .run_command("add-teammate", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("add-teammate", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("Renamed"), "{message}");
         assert_eq!(
             roster_of(&host),
-            vec![
-                person("Ada Lovelace II", "ada@x.io"),
-                person("Bob", "bob@x.io")
-            ],
+            vec![person("Ada Lovelace II", "ada@x.io"), person("Bob", "bob@x.io")],
             "same email: renamed, not duplicated"
         );
         host.answer_next_prompt(Some(&["Broken <no email>"]));
-        assert!(
-            plugin
-                .run_command("add-teammate", &host.invocation(), None)
-                .is_err(),
-            "invalid input is an error"
-        );
-        assert_eq!(
-            roster_of(&host).len(),
-            2,
-            "nothing was added by the failed parse"
-        );
+        assert!(plugin.run_command("add-teammate", &host.invocation(), None).is_err(), "invalid input is an error");
+        assert_eq!(roster_of(&host).len(), 2, "nothing was added by the failed parse");
     }
 
     #[test]
     fn a_dismissed_add_dialog_adds_nothing() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        let outcome = plugin
-            .run_command("add-teammate", &host.invocation(), None)
-            .unwrap();
+        let outcome = plugin.run_command("add-teammate", &host.invocation(), None).unwrap();
         assert!(outcome.is_none());
         assert!(!host.storage().contains_key(ROSTER));
     }
@@ -886,23 +675,12 @@ mod tests {
         let mut plugin = GitCoAuthors;
         let roster = vec![person("Ada", "a@x.io"), person("Bob", "b@x.io")];
         storage::set(ROSTER, &serde_json::to_string(&roster).unwrap()).unwrap();
-        storage::set(
-            ACTIVE,
-            &serde_json::to_string(&["a@x.io", "b@x.io"]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ACTIVE, &serde_json::to_string(&["a@x.io", "b@x.io"]).unwrap()).unwrap();
         host.answer_next_prompt(Some(&["a@x.io"]));
-        let message = plugin
-            .run_command("remove-teammates", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("remove-teammates", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("Ada"), "{message}");
         assert_eq!(roster_of(&host), vec![person("Bob", "b@x.io")]);
-        assert_eq!(
-            active_of(&host),
-            vec!["b@x.io"],
-            "a removed teammate stops being picked"
-        );
+        assert_eq!(active_of(&host), vec!["b@x.io"], "a removed teammate stops being picked");
         assert_eq!(host.status_items()[ITEM].text, "co-authors: Bob");
     }
 
@@ -925,16 +703,9 @@ mod tests {
     fn clear_unpicks_everyone() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
-        plugin
-            .run_command("clear", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        plugin.run_command("clear", &host.invocation(), None).unwrap().unwrap();
         assert!(active_of(&host).is_empty());
         assert_eq!(roster_of(&host).len(), 1, "clearing keeps the roster");
         assert_eq!(host.status_items()[ITEM].text, "＋ co-authors");
@@ -946,33 +717,19 @@ mod tests {
     fn apply_appends_the_trailers_to_the_pending_commit() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        let roster = vec![
-            person("Ada Lovelace", "ada@example.com"),
-            person("Bob", "b@x.io"),
-        ];
+        let roster = vec![person("Ada Lovelace", "ada@example.com"), person("Bob", "b@x.io")];
         storage::set(ROSTER, &serde_json::to_string(&roster).unwrap()).unwrap();
-        storage::set(
-            ACTIVE,
-            &serde_json::to_string(&["ada@example.com"]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ACTIVE, &serde_json::to_string(&["ada@example.com"]).unwrap()).unwrap();
         host.set_commit_draft(Some(draft("Pair work on the parser\n")));
-        let message = plugin
-            .run_command("apply", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("apply", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("Ada Lovelace"), "{message}");
         let new_draft = host.commit_draft().unwrap();
         assert_eq!(
-            new_draft.message,
-            "Pair work on the parser\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
+            new_draft.message, "Pair work on the parser\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
             "the message's own trailing newline is kept after the new trailer block"
         );
         assert_eq!(new_draft.revision, 8, "the mock bumps the revision on set");
-        assert!(
-            message.contains("review the message"),
-            "the user still commits themselves"
-        );
+        assert!(message.contains("review the message"), "the user still commits themselves");
     }
 
     #[test]
@@ -983,15 +740,11 @@ mod tests {
         storage::set(ROSTER, &serde_json::to_string(&roster).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["ada@example.com"]).unwrap()).unwrap();
         host.set_commit_draft(Some(draft("fix: bug\n")));
-        let message = plugin
-            .run_command("apply", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("apply", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("review the message"), "{message}");
         let new_draft = host.commit_draft().unwrap();
         assert_eq!(
-            new_draft.message,
-            "fix: bug\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
+            new_draft.message, "fix: bug\n\nCo-authored-by: Ada Lovelace <ada@example.com>\n",
             "the subject gets a blank line of its own before the trailer block"
         );
         assert_eq!(
@@ -1010,32 +763,18 @@ mod tests {
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
         let already = draft("Work\n\nCo-authored-by: Ada <a@x.io>");
         host.set_commit_draft(Some(already.clone()));
-        let message = plugin
-            .run_command("apply", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("apply", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("already credits"), "{message}");
-        assert_eq!(
-            host.commit_draft().unwrap(),
-            already,
-            "nothing was rewritten"
-        );
+        assert_eq!(host.commit_draft().unwrap(), already, "nothing was rewritten");
     }
 
     #[test]
     fn apply_without_picked_coauthors_touches_nothing() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         host.set_commit_draft(Some(draft("Work")));
-        let message = plugin
-            .run_command("apply", &host.invocation(), None)
-            .unwrap()
-            .unwrap();
+        let message = plugin.run_command("apply", &host.invocation(), None).unwrap().unwrap();
         assert!(message.contains("Pick Co-authors"), "{message}");
         assert_eq!(host.commit_draft().unwrap().message, "Work");
     }
@@ -1044,54 +783,29 @@ mod tests {
     fn apply_outside_the_commit_window_is_an_error() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
-        let err = plugin
-            .run_command("apply", &host.invocation(), None)
-            .unwrap_err();
-        assert!(
-            err.to_string().contains("no commit is being prepared"),
-            "{err}"
-        );
+        let err = plugin.run_command("apply", &host.invocation(), None).unwrap_err();
+        assert!(err.to_string().contains("no commit is being prepared"), "{err}");
     }
 
     #[test]
     fn apply_honours_the_capability_gates() {
         let host = MockHost::install().with_capabilities(&["storage", "vcs.write"]);
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
         host.set_commit_draft(Some(draft("Work")));
-        let err = plugin
-            .run_command("apply", &host.invocation(), None)
-            .unwrap_err();
+        let err = plugin.run_command("apply", &host.invocation(), None).unwrap_err();
         assert!(err.to_string().contains("vcs.read"), "{err}");
         let host = MockHost::install().with_capabilities(&["storage", "vcs.read"]);
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
         host.set_commit_draft(Some(draft("Work")));
-        let err = plugin
-            .run_command("apply", &host.invocation(), None)
-            .unwrap_err();
+        let err = plugin.run_command("apply", &host.invocation(), None).unwrap_err();
         assert!(err.to_string().contains("vcs.write"), "{err}");
-        assert_eq!(
-            host.commit_draft().unwrap().message,
-            "Work",
-            "nothing was written"
-        );
+        assert_eq!(host.commit_draft().unwrap().message, "Work", "nothing was written");
     }
 
     #[test]
@@ -1099,9 +813,7 @@ mod tests {
         let host = MockHost::install().with_capabilities(&["vcs.read", "vcs.write"]);
         let mut plugin = GitCoAuthors;
         host.answer_next_prompt(Some(&["Ada <a@x.io>"]));
-        let err = plugin
-            .run_command("pick", &host.invocation(), None)
-            .unwrap_err();
+        let err = plugin.run_command("pick", &host.invocation(), None).unwrap_err();
         assert!(err.to_string().contains("storage"), "{err}");
     }
 
@@ -1112,14 +824,8 @@ mod tests {
         let host = MockHost::install();
         assert!(host.status_items().is_empty());
         let mut plugin = GitCoAuthors;
-        plugin
-            .activate(&host.context("inf1mum.git-coauthors"))
-            .unwrap();
-        assert_eq!(
-            host.status_items()[ITEM].text,
-            "＋ co-authors",
-            "nobody picked yet"
-        );
+        plugin.activate(&host.context("inf1mum.git-coauthors")).unwrap();
+        assert_eq!(host.status_items()[ITEM].text, "＋ co-authors", "nobody picked yet");
         assert_eq!(host.status_items()[ITEM].command.as_deref(), Some("pick"));
     }
 
@@ -1127,11 +833,7 @@ mod tests {
     fn vcs_changed_renders_the_item_again() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        storage::set(
-            ROSTER,
-            &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap(),
-        )
-        .unwrap();
+        storage::set(ROSTER, &serde_json::to_string(&[person("Ada", "a@x.io")]).unwrap()).unwrap();
         storage::set(ACTIVE, &serde_json::to_string(&["a@x.io"]).unwrap()).unwrap();
         plugin.handle_events(&[Event::VcsChanged("/project".into())], &host.invocation());
         assert_eq!(host.status_items()[ITEM].text, "co-authors: Ada");
@@ -1141,9 +843,7 @@ mod tests {
     fn an_unknown_command_is_not_found() {
         let host = MockHost::install();
         let mut plugin = GitCoAuthors;
-        let err = plugin
-            .run_command("nope", &host.invocation(), None)
-            .unwrap_err();
+        let err = plugin.run_command("nope", &host.invocation(), None).unwrap_err();
         assert!(matches!(err, Error::NotFound(_)), "{err}");
     }
 }
