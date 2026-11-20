@@ -1,6 +1,6 @@
 id = "inf1mum.git-coauthors"
 name = "Git CoAuthors"
-version = "0.1.0"
+version = "0.1.1"
 description = """\
 Git Mob-style co-authored commits: keep a roster of your teammates, pick the \
 ones you are pairing or mobbing with, and every picked person is credited on \
